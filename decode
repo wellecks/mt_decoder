@@ -1,0 +1,109 @@
+#!/usr/bin/env python
+import optparse
+import sys
+import models
+from collections import namedtuple
+import copy
+import pdb
+import decoder
+
+optparser = optparse.OptionParser()
+optparser.add_option("-i", "--input", dest="input", default="data/input", help="File containing sentences to translate (default=data/input)")
+optparser.add_option("-t", "--translation-model", dest="tm", default="data/tm", help="File containing translation model (default=data/tm)")
+optparser.add_option("-l", "--language-model", dest="lm", default="data/lm", help="File containing ARPA-format language model (default=data/lm)")
+optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to decode (default=no limit)")
+optparser.add_option("-k", "--translations-per-phrase", dest="k", default=30, type="int", help="Limit on number of translations to consider per phrase (default=1)")
+optparser.add_option("-s", "--stack-size", dest="s", default=300, type="int", help="Maximum stack size (default=1)")
+optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False,  help="Verbose mode (default=off)")
+opts = optparser.parse_args()[0]
+
+# the translation model
+tm = models.TM(opts.tm, opts.k)
+# the language model
+lm = models.LM(opts.lm)
+
+# the foreign sentences
+french = [tuple(line.strip().split()) for line in open(opts.input).readlines()[:opts.num_sents]]
+
+# tm should translate unknown words as-is with probability 1
+for word in set(sum(french,())):
+  if (word,) not in tm:
+    tm[(word,)] = [models.phrase(word, 0.0)]
+
+
+sys.stderr.write("Decoding %s...\n" % (opts.input,))
+for n, f in enumerate(french):
+  sentence = decoder.decode(f, lm, tm, opts)
+  print sentence
+  sys.stderr.write("Decoded %d of %d sentences...\n" % (n, len(french)))
+
+  # else:
+  #   hypo = namedtuple("hypo", "logprob, lm_state, predecessor, phrase, marked, end_i")
+  #   marked = [0 for _ in source] 
+  #   initial_hypo = hypo(0.0, lm.begin(), None, None, marked, 0,)
+  #   # given a hypothesis, get all remaining translation options
+  #   # the options should be drawn from words that have yet to be translated
+  #   # sequences must only be contiguous words of the foreign sentence
+  #   def get_trans_options(h, f):
+  #     options = []
+  #     for fi in xrange(len(f)):
+  #       for fj in xrange(fi+1, len(f)+1):
+  #         # check if the range is unmarked
+  #         unmarked = all(lambda x: h.marked[x]==0 for m in range(fi, fj))
+  #         if unmarked:
+  #           if f[fi:fj] in tm:
+  #             phrases = tm[f[fi:fj]]
+  #             for p in phrases:
+  #               options.append((p, (fi, fj)))
+  #     return options
+
+  #   # cost function for reordering probabilities
+  #   def d(x):
+  #     alpha = 0.8
+  #     return pow(alpha, abs(x))
+
+  #   # create a stack for each number-of-words-translated
+  #   stacks = [{} for _ in f] + [{}]
+  #   # in the zero'th stack, map start symbol to empty hypothesis
+  #   stacks[0][lm.begin()] = initial_hypo
+  #   for i, stack in enumerate(stacks[:-1]):
+  #     for h in sorted(stack.itervalues(), key=lambda h: -h.logprob)[:opts.s]:
+  #       # get the translation options for this hypothesis
+  #       options = get_trans_options(h, f)
+
+  #       # for each translation option
+  #       for (phrase, idxs) in options:
+  #         a = idxs[0]
+  #         b = idxs[1]
+  #         # add the log probability
+  #         logprob = h.logprob + phrase.logprob
+  #         lm_state = h.lm_state
+
+  #         # add a reordering penalty
+  #         #r_penalty = d(h.end_i - a - 1)
+  #         #logprob += math.log(r_penalty)
+
+  #         # evaluate the english phrase using the language model
+  #         for word in phrase.english.split():
+  #           (lm_state, word_logprob) = lm.score(lm_state, word)
+  #           logprob += word_logprob
+  #           logprob += lm.end(lm_state) if b == len(f) else 0.0
+  #         marked = copy.deepcopy(h.marked)
+  #         # mark the word sequence that we're translating to denote
+  #         # that the words have been translated in this hypothesis
+  #         for x in xrange(a, b):
+  #           marked[x] = 1
+  #         num_marked = len(filter(lambda x: x == 1, marked))
+  #         tmark = tuple(marked)
+  #         # create a new hypothesis
+  #         new_hypothesis = hypo(logprob, lm_state, h, phrase, marked, b)
+  #         if tmark not in stacks[num_marked] or stacks[num_marked][tmark].logprob < logprob: # second case is recombination
+  #               stacks[num_marked][tmark] = new_hypothesis
+  #   winner = max(stacks[-1].itervalues(), key=lambda h: h.logprob)
+
+  if opts.verbose:
+    def extract_tm_logprob(h):
+      return 0.0 if h.predecessor is None else h.phrase.logprob + extract_tm_logprob(h.predecessor)
+    tm_logprob = extract_tm_logprob(winner)
+    sys.stderr.write("LM = %f, TM = %f, Total = %f\n" % 
+      (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
