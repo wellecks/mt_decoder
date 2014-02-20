@@ -1,0 +1,23 @@
+#!/usr/bin/env python
+
+# A script to combine two decoded files.
+import optparse
+import models
+import decoder
+
+optparser = optparse.OptionParser()
+optparser.add_option("-i", "--input", dest="input", default="data/input", help="File containing sentences to translate (default=data/input)")
+optparser.add_option("-t", "--translation-model", dest="tm", default="data/tm", help="File containing translation model (default=data/tm)")
+optparser.add_option("-l", "--language-model", dest="lm", default="data/lm", help="File containing ARPA-format language model (default=data/lm)")
+
+opts = optparser.parse_args()[0]
+
+# the translation model
+tm = models.TM(opts.tm, opts.k)
+# the language model
+lm = models.LM(opts.lm)
+
+file1 = "output/assignment2.txt"
+file2 = "output/stack_decoder_mod"
+
+decoder.combine(file1, file2, lm, tm, opts)

@@ -8,6 +8,8 @@
 
 from collections import namedtuple
 import copy
+import evaluator
+import sys
 
 # The top-level function for the decoding algorithm. Decodes a 
 # source sentence, given a language model and a translation model. 
@@ -19,6 +21,10 @@ import copy
 def decode(source, lm, tm, opts):
 	d = Decoder(lm, tm, opts)
 	return d.decode(source)
+
+def combine(dfile1, dfile2, lm, tm, opts):
+	d = Decoder(lm, tm, opts)
+	d.combine_decodings(dfile1, dfile2)
 
 # Performs decoding with a language model and translation model.
 # Contains multiple decoding strategies, which are combined in decode().
@@ -270,7 +276,6 @@ class Decoder:
 	# sequences must only be contiguous words of the foreign sentence
 	def get_trans_options(self, h, f):
 	  options = []
-	  distance_limit = 5
 	  for fi in xrange(len(f)):
 	    for fj in xrange(fi+1, len(f)+1):
 	      # check if the range is unmarked
@@ -281,3 +286,23 @@ class Decoder:
 	          for p in phrases:
 	            options.append((p, (fi, fj)))
 	  return options
+
+	# Combines two files containing decodings by choosing, for each sentence,
+	# the higher scoring decoding. Writes to a file.
+	# Input:	dfile1 - a file with sentence decodings
+	# 				dfile2 - a file with sentence decodings
+	# Output:	prints out combined decodings.
+	def combine_decodings(self, dfile1, dfile2):
+		e = evaluator.Evaluator(self.opts)
+		decodings1 = [tuple(line.strip().split()) for line in open(dfile1).readlines()]
+		decodings2 = [tuple(line.strip().split()) for line in open(dfile2).readlines()]
+		french = [tuple(line.strip().split()) for line in open(self.opts.input).readlines()]
+		for n, (f, (d1, d2)) in enumerate(zip(french, zip(decodings1, decodings2))):
+			score1 = e.grade_score(f, d1)
+			score2 = e.grade_score(f, d2)
+			if score1 > score2:
+				print(" ".join(d1))
+			else:
+				print(" ".join(d2))
+			sys.stderr.write("Combined %d sentences." % n)
+

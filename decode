@@ -2,7 +2,6 @@
 import optparse
 import sys
 import models
-import pdb
 import decoder
 
 optparser = optparse.OptionParser()
