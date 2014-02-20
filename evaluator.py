@@ -16,14 +16,12 @@ class Evaluator:
 	# returns the total log probability for a translation,
 	# using the grader's algorithm.
 	def grade_score(self, f, e):
-		lm_state = self.lm.begin()
-		total_logprob = 0.0
-		lm_logprob = 0.0
-		for word in e + ("</s>",):
-		  (lm_state, word_logprob) = self.lm.score(lm_state, word)
-		  lm_logprob += word_logprob
-		total_logprob += lm_logprob
+		alignments = self.get_alignments(f, e)
+		score = self.grade_with_alignments(f, e, alignments)
+		return score
 
+	# Computes all possible phrase-to-phrase alignments.
+	def get_alignments(self, f, e):
 		alignments = [[] for _ in e]
 		for fi in xrange(len(f)):
 		  for fj in xrange(fi+1,len(f)+1):
@@ -34,7 +32,19 @@ class Evaluator:
 		          ej = ei+len(ephrase)
 		          if ephrase == e[ei:ej]:
 		            alignments[ei].append((ej, phrase.logprob, fi, fj))
+		return alignments
 
+	# Grade a sentence with a given set of alignments. Lets you 
+	# grade numerous sentences without the overhead of computing alignments
+	# each time.
+	def grade_with_alignments(self, f, e, alignments):
+		lm_state = self.lm.begin()
+		total_logprob = 0.0
+		lm_logprob = 0.0
+		for word in e + ("</s>",):
+		  (lm_state, word_logprob) = self.lm.score(lm_state, word)
+		  lm_logprob += word_logprob
+		total_logprob += lm_logprob
 		# Compute sum of probability of all possible alignments by dynamic programming.
 		chart = [{} for _ in e] + [{}]
 		chart[0][0] = 0.0

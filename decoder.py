@@ -97,10 +97,14 @@ class Decoder:
 	# 				seed 	 - an initial hypothesis
 	# Output: the highest scoring hypothesis as formatted by hyp_to_phrases.
 	def greedy_decode(self, source, seed):
+		ev = evaluator.Evaluator(self.opts)
+		e = tuple([ep.english for (ep, _) in seed if ep != None])
+		alignments = ev.get_alignments(source, e)
 		iters = 100
 		current = seed
 		for i in xrange(iters):
-		  s_current = self.score(current, source)
+		  #s_current = self.score(current, source)
+		  s_current = self.score_with_grader(source, e, alignments, ev)
 		  s = s_current
 		  for h in self.neighborhood(current):
 		    c = self.score(h, source)
@@ -135,6 +139,10 @@ class Decoder:
 	      tm_prob += ep.logprob
 
 	  return (lm_prob + tm_prob)
+
+	def score_with_grader(self, f, e, alignments, ev):
+		score = ev.grade_with_alignments(f, e, alignments)
+		return score
 
 	# The possible next-steps for the hill climbing algorithm.
 	def neighborhood(self, ps):
