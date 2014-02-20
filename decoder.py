@@ -1,7 +1,7 @@
 ### Decoder - Statistical Machine Translation
 ### Sean Welleck | 2014
 #
-# A module for decoding setences of a source language into a target language,
+# A module for decoding sentences of a source language into a target language,
 # given a language model and translation model.
 #
 # Usage: target_sentence = decoder.decode(source_sentence, lm, tm)
@@ -30,7 +30,8 @@ class Decoder:
 
 	# Decode a source sentence string into a target sentence string.
 	def decode(self, source):
-		seed = self.monotone_decode(source)
+		#seed = self.monotone_decode(source)
+		seed = self.stack_decode(source)
 		decoded = self.greedy_decode(source, seed)
 		return self.print_phrases(decoded)
 
@@ -191,8 +192,7 @@ class Decoder:
 	# Splits each multiple-word source phrase into
 	# two source phrases, if their translation exist. 
 	# Tries all possible 2-splits.
-	# E.g. ('si', 'aucun', 'autre') -> [('si', 'aucun'), ('autre')],
-	#																	 [('si'), ('aucun', 'autre')]
+	# E.g. ('si', 'aucun', 'autre') -> [('si', 'aucun'), ('autre')], [('si'), ('aucun', 'autre')]
 	def split(self, ps):
 	  splits = []
 	  for n, i in enumerate(ps):
@@ -220,9 +220,64 @@ class Decoder:
 		    s += p[0].english + " "
 		return s
 
-	# TODO
 	# Decode a sentence using a non-monotone stack decoder.
-	# Input: 	source - a sentence string in the source language
+	# Input: source - a sentence string in the source language
 	# Output: winner - the highest scoring Hypothesis
 	def stack_decode(self, source):
-		return self.Hypothesis("", "", 0.00)
+		hypo = namedtuple("hypo", "logprob, lm_state, predecessor, phrase, marked, end_i, fphrase")
+		# 1 if we've translated the word at the index
+		marked = [0 for _ in source] 
+		initial_hypothesis = hypo(0.0, self.lm.begin(), None, None, marked, 0, None)
+
+		# create a stack for each number-of-words-translated
+		stacks = [{} for _ in source] + [{}]
+		# in the zero'th stack, map start symbol to empty hypothesis
+		stacks[0][self.lm.begin()] = initial_hypothesis
+		for i, stack in enumerate(stacks[:-1]):
+		  for hyp in sorted(stack.itervalues(), key=lambda h: -h.logprob)[:self.opts.s]:
+		    # get the translation options for this hypothesis
+		    options = self.get_trans_options(hyp, source)
+
+		    # for each translation option
+		    for (phrase, idxs) in options:
+		      start_ind = idxs[0]
+		      end_ind = idxs[1]
+		      # add the log probability from the translation model
+		      logprob = hyp.logprob + phrase.logprob
+		      lm_state = hyp.lm_state
+
+		      # evaluate the english phrase using the language model
+		      for word in phrase.english.split():
+		        (lm_state, word_logprob) = self.lm.score(lm_state, word)
+		        logprob += word_logprob
+		        logprob += self.lm.end(lm_state) if end_ind == len(source)-1 else 0.0
+		      marked = copy.deepcopy(hyp.marked)
+		      # mark the word sequence that we're translating to denote
+		      # that the words have been translated in this hypothesis
+		      for x in xrange(start_ind, end_ind):
+		        marked[x] = 1
+		      num_marked = len(filter(lambda x: x == 1, marked))
+		      tmark = tuple(marked)
+		      # create a new hypothesis
+		      new_hypothesis = hypo(logprob, lm_state, hyp, phrase, marked, end_ind, source[start_ind:end_ind])
+		      if tmark not in stacks[num_marked] or stacks[num_marked][tmark].logprob < logprob: # second case is recombination
+		        stacks[num_marked][tmark] = new_hypothesis
+		winner = max(stacks[-1].itervalues(), key=lambda h: h.logprob)
+		return self.hyp_to_phrases(winner)
+
+	# given a hypothesis, get all remaining translation options
+	# the options should be drawn from words that have yet to be translated
+	# sequences must only be contiguous words of the foreign sentence
+	def get_trans_options(self, h, f):
+	  options = []
+	  distance_limit = 5
+	  for fi in xrange(len(f)):
+	    for fj in xrange(fi+1, len(f)+1):
+	      # check if the range is unmarked
+	      unmarked = all(lambda x: h.marked[x]==0 for m in range(fi, fj))
+	      if unmarked:
+	        if f[fi:fj] in self.tm:
+	          phrases = self.tm[f[fi:fj]]
+	          for p in phrases:
+	            options.append((p, (fi, fj)))
+	  return options
