@@ -18,7 +18,7 @@ tm = models.TM(opts.tm, opts.k)
 # the language model
 lm = models.LM(opts.lm)
 
-file1 = "output/combined"
-file2 = "greedy_new"
+file1 = "output/combined3"
+file2 = "output/stack_thold_greedy"
 
 decoder.combine(file1, file2, lm, tm, opts)

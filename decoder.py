@@ -10,6 +10,7 @@ from collections import namedtuple
 import copy
 import evaluator
 import sys
+import pdb
 
 # The top-level function for the decoding algorithm. Decodes a 
 # source sentence, given a language model and a translation model. 
@@ -55,7 +56,11 @@ class Decoder:
 		# for each stack
 		for i, stack in enumerate(stacks[:-1]):
 		  # histogram pruning (just chop off n - s worst scoring hypotheses)
-		  for h in sorted(stack.itervalues(),key=lambda h: -h.logprob)[:self.opts.s]: # prune
+		  toph = max(stack.itervalues(),key=lambda h: h.logprob)
+		  top = toph.logprob
+		  threshold = 0.2
+		  pruned = filter(lambda h: -h.logprob >= -threshold*top, stack.itervalues())
+		  for h in pruned: # prune
 		    # look to the next consecutive words
 		    for j in xrange(i+1,len(source)+1):
 		      # if the sequence is in the translation model
@@ -97,14 +102,14 @@ class Decoder:
 	# 				seed 	 - an initial hypothesis
 	# Output: the highest scoring hypothesis as formatted by hyp_to_phrases.
 	def greedy_decode(self, source, seed):
-		ev = evaluator.Evaluator(self.opts)
-		e = tuple([ep.english for (ep, _) in seed if ep != None])
-		alignments = ev.get_alignments(source, e)
+		#ev = evaluator.Evaluator(self.opts)
+		#e = tuple([ep.english for (ep, _) in seed if ep != None])
+		#alignments = ev.get_alignments(source, e)
 		iters = 100
 		current = seed
 		for i in xrange(iters):
-		  #s_current = self.score(current, source)
-		  s_current = self.score_with_grader(source, e, alignments, ev)
+		  s_current = self.score(current, source)
+		  #s_current = self.score_with_grader(source, e, alignments, ev)
 		  s = s_current
 		  for h in self.neighborhood(current):
 		    c = self.score(h, source)
@@ -248,34 +253,43 @@ class Decoder:
 		# in the zero'th stack, map start symbol to empty hypothesis
 		stacks[0][self.lm.begin()] = initial_hypothesis
 		for i, stack in enumerate(stacks[:-1]):
-		  for hyp in sorted(stack.itervalues(), key=lambda h: -h.logprob)[:self.opts.s]:
+			if len(stack) > self.opts.s:
+				toph = max(stack.itervalues(),key=lambda h: h.logprob)
+				top = toph.logprob
+				threshold = 1.2
+				pruned = sorted(filter(lambda h: h.logprob >= threshold*top, stack.itervalues()), key=lambda h: -h.logprob)[:500]
+				sys.stderr.write("%d" % len(pruned))
+			else:
+				pruned = stack.itervalues()
+			for hyp in pruned: # prune
+		  #for hyp in sorted(stack.itervalues(), key=lambda h: -h.logprob)[:self.opts.s]:
 		    # get the translation options for this hypothesis
-		    options = self.get_trans_options(hyp, source)
+				options = self.get_trans_options(hyp, source)
 
-		    # for each translation option
-		    for (phrase, idxs) in options:
-		      start_ind = idxs[0]
-		      end_ind = idxs[1]
-		      # add the log probability from the translation model
-		      logprob = hyp.logprob + phrase.logprob
-		      lm_state = hyp.lm_state
+				# for each translation option
+				for (phrase, idxs) in options:
+				  start_ind = idxs[0]
+				  end_ind = idxs[1]
+				  # add the log probability from the translation model
+				  logprob = hyp.logprob + phrase.logprob
+				  lm_state = hyp.lm_state
 
-		      # evaluate the english phrase using the language model
-		      for word in phrase.english.split():
-		        (lm_state, word_logprob) = self.lm.score(lm_state, word)
-		        logprob += word_logprob
-		        logprob += self.lm.end(lm_state) if end_ind == len(source)-1 else 0.0
-		      marked = copy.deepcopy(hyp.marked)
-		      # mark the word sequence that we're translating to denote
-		      # that the words have been translated in this hypothesis
-		      for x in xrange(start_ind, end_ind):
-		        marked[x] = 1
-		      num_marked = len(filter(lambda x: x == 1, marked))
-		      tmark = tuple(marked)
-		      # create a new hypothesis
-		      new_hypothesis = hypo(logprob, lm_state, hyp, phrase, marked, end_ind, source[start_ind:end_ind])
-		      if tmark not in stacks[num_marked] or stacks[num_marked][tmark].logprob < logprob: # second case is recombination
-		        stacks[num_marked][tmark] = new_hypothesis
+				  # evaluate the english phrase using the language model
+				  for word in phrase.english.split():
+				    (lm_state, word_logprob) = self.lm.score(lm_state, word)
+				    logprob += word_logprob
+				    logprob += self.lm.end(lm_state) if end_ind == len(source)-1 else 0.0
+				  marked = copy.deepcopy(hyp.marked)
+				  # mark the word sequence that we're translating to denote
+				  # that the words have been translated in this hypothesis
+				  for x in xrange(start_ind, end_ind):
+				    marked[x] = 1
+				  num_marked = len(filter(lambda x: x == 1, marked))
+				  tmark = tuple(marked)
+				  # create a new hypothesis
+				  new_hypothesis = hypo(logprob, lm_state, hyp, phrase, marked, end_ind, source[start_ind:end_ind])
+				  if tmark not in stacks[num_marked] or stacks[num_marked][tmark].logprob < logprob: # second case is recombination
+				    stacks[num_marked][tmark] = new_hypothesis
 		winner = max(stacks[-1].itervalues(), key=lambda h: h.logprob)
 		return self.hyp_to_phrases(winner)
 
