@@ -256,7 +256,7 @@ class Decoder:
 			if len(stack) > self.opts.s:
 				toph = max(stack.itervalues(),key=lambda h: h.logprob)
 				top = toph.logprob
-				threshold = 1.2
+				threshold = 1.3
 				pruned = sorted(filter(lambda h: h.logprob >= threshold*top, stack.itervalues()), key=lambda h: -h.logprob)[:500]
 				sys.stderr.write("%d" % len(pruned))
 			else:
