@@ -10,19 +10,20 @@ from collections import namedtuple
 import copy
 import evaluator
 import sys
-import pdb
 
 # The top-level function for the decoding algorithm. Decodes a 
 # source sentence, given a language model and a translation model. 
-# Input:	source 	- a sentence string in the source language, e.g. french
-#					lm     	- a trained language model
+# Input:	source	- a sentence string in the source language, e.g. french
+#					lm			- a trained language model
 #					tm			- a trained translation model
 #					opts		- command line options
-# Output:	target  - a sentence string in the target language, e.g. english
+# Output:	target	- a sentence string in the target language, e.g. english
 def decode(source, lm, tm, opts):
 	d = Decoder(lm, tm, opts)
 	return d.decode(source)
 
+# Combine two decoded files, using the given language model,
+# translation model, and options.
 def combine(dfile1, dfile2, lm, tm, opts):
 	d = Decoder(lm, tm, opts)
 	d.combine_decodings(dfile1, dfile2)
@@ -37,15 +38,14 @@ class Decoder:
 
 	# Decode a source sentence string into a target sentence string.
 	def decode(self, source):
-		#seed = self.monotone_decode(source)
 		seed = self.stack_decode(source)
 		decoded = self.greedy_decode(source, seed)
 		return self.print_phrases(decoded)
 
 	# Decode a sentence using a monotone decoder.
 	# Input: 	source 	- a sentence string in the source language
-	# Output: phrases - the highest scoring hypothesis as formatted 
-	#										by hyp_to_phrases().
+	# Output: phrases - the highest scoring hypothesis as formatted
+	# by hyp_to_phrases().
 	def monotone_decode(self, source):
 		hypothesis = namedtuple("hypothesis", "logprob, lm_state, predecessor, phrase, fphrase")
 		initial_hypothesis = hypothesis(0.0, self.lm.begin(), None, None, None)
@@ -83,8 +83,7 @@ class Decoder:
 
 	# Converts a hypothesis into a list of phrases.
   # Input:  hyp - hypothesis
-  # Output: ps  - [(phrase, french)]
-  #               e.g. [(phrase(english='honourable', logprob=0.0), ('honorables',))]
+  # Output: ps  - [(phrase, french)] e.g. [(phrase(english='honourable', logprob=0.0), ('honorables',))]
 	def hyp_to_phrases(self, hyp):
 		phrases = []
 		def get_phrases(hyp, ps):
@@ -145,6 +144,8 @@ class Decoder:
 
 	  return (lm_prob + tm_prob)
 
+	# An alternative scoring function. Uses the Evaluator to
+	# score a sentence.
 	def score_with_grader(self, f, e, alignments, ev):
 		score = ev.grade_with_alignments(f, e, alignments)
 		return score

@@ -2,6 +2,11 @@ import sys
 import models
 import math
 
+### Evaluator
+# This class adapts the code from the grading function to compute
+# all phrase-to-phrase alignments, and assign a score to a 
+# translated sentence. It is used to compare two translations.
+# It can also be used as a scoring function by the greedy decoder.
 class Evaluator:
 	def __init__(self, opts):
 		self.opts = opts

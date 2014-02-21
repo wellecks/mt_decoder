@@ -33,10 +33,3 @@ for n, f in enumerate(french):
   sentence = decoder.decode(f, lm, tm, opts)
   print sentence
   sys.stderr.write("Decoded %d of %d sentences...\n" % (n, len(french)))
-
-  if opts.verbose:
-    def extract_tm_logprob(h):
-      return 0.0 if h.predecessor is None else h.phrase.logprob + extract_tm_logprob(h.predecessor)
-    tm_logprob = extract_tm_logprob(winner)
-    sys.stderr.write("LM = %f, TM = %f, Total = %f\n" % 
-      (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
